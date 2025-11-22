@@ -111,7 +111,7 @@ clock = pygame.time.Clock()
 images = [(GRASS, (0, 0)), (TRACK, (0, 0)), (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
 
 # We will eventually have a list of 50+ cars here
-cars = [AICar(4, 4)]
+cars = [AICar(8, 4)]
 
 while run:
     clock.tick(FPS)
