@@ -76,7 +76,7 @@ class Car:
     def check_collision(self):
         if self.collide(TRACK_BORDER_MASK) is not None:
             self.alive = False
-            print("CRASH! Car Died.")
+            #print("CRASH! Car Died.")
 
     def collide(self, mask, x=0, y=0):
         car_mask = pygame.mask.from_surface(self.img)
@@ -106,33 +106,40 @@ class PlayerCar(Car):
 
 # =============== SIMULATED ANNEALING ===============
 
-ACTIONS = ["ACCELERATE", "ROTATE_LEFT", "ROTATE_RIGHT", "GO_STRAIGHT"]
+ACTIONS = ["ACCELERATE", "BRAKE", "ROTATE_LEFT", "ROTATE_RIGHT", "GO_STRAIGHT"]
 
 ACTION_REPEAT = 5
 
-CHECKPOINTS = None # we need to implement a load of checkpoints cuz this map is massive
-# Click on the track to see some coordinates to make this easier
+CHECKPOINTS = [
+    (116, 71), (49, 138), (70, 481), (315, 732),
+    (408, 671), (429, 499), (571, 504), (611, 705),
+    (727, 713), (727, 386), (438, 360), (410, 287),
+    (721, 242), (726, 90), (298, 81), (280, 362),
+    (209, 401), (178, 359)
+]
+
 def apply_action(car, action):
-    if action == "ACCELERATE":
-        car.move_forward()
+    match action:
+        case "ACCELERATE":
+            car.move_forward()
 
-    elif action == "BRAKE":
-        car.move_backward()
+        case "BRAKE":
+            car.move_backward()
 
-    elif action == "GO_STRAIGHT":
-        if car.vel > 0:
-            car.reduce_speed()
-        else:
-            car.vel = 0
+        case "GO_STRAIGHT":
+            if car.vel > 0:
+                car.reduce_speed()
+            else:
+                car.vel = 0
+                car.move()
+
+        case "ROTATE_LEFT":
+            car.rotate(left=True)
             car.move()
 
-    elif action == "ROTATE_LEFT":
-        car.rotate(left=True)
-        car.move()
-
-    elif action == "ROTATE_RIGHT":
-        car.rotate(right=True)
-        car.move()
+        case "ROTATE_RIGHT":
+            car.rotate(right=True)
+            car.move()
 
 def get_checkpoint_index(car): # Return the index of the closest checkpoint within a radius.
 
@@ -146,25 +153,34 @@ def random_actions(length=500):
     return [random.choice(ACTIONS) for _ in range(length)]
 
 def measure_progress(car, last_checkpoint_idx):
-    # REWARD: reaching next checkpoint
-    idx = get_checkpoint_index(car)
+    # 1. Identify the target checkpoint (the next one in the list)
+    # We use % len(CHECKPOINTS) so it loops back to start after the last one
+    target_idx = (last_checkpoint_idx + 1) % len(CHECKPOINTS)
+    target_point = CHECKPOINTS[target_idx]
+
+    # 2. Calculate distance to that target
+    dist_to_target = math.hypot(car.x - target_point[0], car.y - target_point[1])
+    
     reward = 0
 
-    if idx > last_checkpoint_idx:
-        reward += 200  # reward for reaching a new checkpoint
-        last_checkpoint_idx = idx
+    # 3. Check if we reached the target
+    # If distance is less than 40px, we count it as "hit"
+    if dist_to_target < 40:
+        last_checkpoint_idx = target_idx # Update our progress
+        reward += 2000  # Massive reward for hitting a checkpoint
+        print(f"Checkpoint {target_idx} reached!") # specific feedback
 
-    # EXTRA: distance toward next checkpoint
-    if last_checkpoint_idx + 1 < len(CHECKPOINTS):
-        next_x, next_y = CHECKPOINTS[last_checkpoint_idx + 1]
-        dist = math.hypot(car.x - next_x, car.y - next_y)
-        reward += max(0, 100 - dist * 0.5)
+    # 4. Reward for simply moving closer to the target
+    # We use a max function so reward doesn't go negative if far away
+    # This guides the AI like a "hot/cold" game
+    reward += max(0, 100 - dist_to_target * 0.1)
 
-    if car.vel < 0:
-        reward -= 50
-
+    # 5. Penalties
+    if car.vel < 1: # Penalize stopping
+        reward -= 20
+    
     if not car.alive:
-        reward -= 500
+        reward -= 1000 # Heavy penalty for dying
 
     return reward, last_checkpoint_idx
 
@@ -241,6 +257,7 @@ player_car = PlayerCar(4, 4)
 ai_car = None
 replay_actions = []
 replay_step = 0
+replay_frame_counter = 0
 
 while run:
     clock.tick(FPS)
@@ -268,12 +285,27 @@ while run:
     if mode == "manual":
         player_car.update_manual()
         draw(WIN, images, [player_car])
+        # # --- TEMPORARY TOOL: Add this inside your main loop ---
+        # if event.type == pygame.MOUSEBUTTONDOWN:
+        #     pos = pygame.mouse.get_pos()
+        #     print(pos) # Prints (x, y) to console
 
     elif mode == "AI":
+        draw(WIN, images, [ai_car])
+
+        # Logic to move the car
         if ai_car and replay_step < len(replay_actions) and ai_car.alive:
             action = replay_actions[replay_step]
+            
+            # Apply the action
             apply_action(ai_car, action)
-            replay_step += 1
-        draw(WIN, images, [ai_car])
+            
+            # Increment the frame counter
+            replay_frame_counter += 1
+
+            # Only move to the NEXT action if we have repeated this one enough times
+            if replay_frame_counter >= ACTION_REPEAT:
+                replay_step += 1
+                replay_frame_counter = 0
 
 pygame.quit()
