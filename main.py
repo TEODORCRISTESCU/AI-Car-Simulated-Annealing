@@ -4,7 +4,6 @@ import math
 from utils import scale_image, blit_rotate_center
 
 # --- CONFIG ---
-# Reduce image size slightly to fit more tracks if needed
 GRASS = scale_image(pygame.image.load("imgs/grass.jpg"), 2.5)
 TRACK = scale_image(pygame.image.load("imgs/track.png"), 0.9)
 
@@ -16,18 +15,17 @@ FINISH = pygame.image.load("imgs/finish.png")
 FINISH_MASK = pygame.mask.from_surface(FINISH)
 FINISH_POSITION = (130, 250)
 
-# Using the Red Car for our AI
 RED_CAR = scale_image(pygame.image.load("imgs/red-car.png"), 0.55)
 
 WIDTH, HEIGHT = TRACK.get_width(), TRACK.get_height()
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Genetic Mutation Simulation")
+pygame.display.set_caption("Car Simulation")
 
 FPS = 60
 
-
 class Car:
     IMG = RED_CAR
+    START_POS = (180, 200) # Moved this to the parent class for easier access
 
     def __init__(self, max_vel, rotation_vel):
         self.img = self.IMG
@@ -37,8 +35,6 @@ class Car:
         self.angle = 0
         self.x, self.y = self.START_POS
         self.acceleration = 0.1
-
-        # Simulation State
         self.alive = True
 
     def rotate(self, left=False, right=False):
@@ -54,6 +50,17 @@ class Car:
         self.vel = min(self.vel + self.acceleration, self.max_vel)
         self.move()
 
+    def move_backward(self): # Added backward movement
+        self.vel = max(self.vel - self.acceleration, -self.max_vel/2)
+        self.move()
+
+    def reduce_speed(self): # Added friction
+        if self.vel > 0:
+            self.vel = max(self.vel - self.acceleration/2, 0)
+        else:
+            self.vel = min(self.vel + self.acceleration/2, 0)
+        self.move()
+
     def move(self):
         radians = math.radians(self.angle)
         vertical = math.cos(radians) * self.vel
@@ -62,13 +69,12 @@ class Car:
         self.y -= vertical
         self.x -= horizontal
 
-        # Step B: Collision Check
         self.check_collision()
 
     def check_collision(self):
-        # If we hit the border, we die
         if self.collide(TRACK_BORDER_MASK) is not None:
             self.alive = False
+            print("CRASH! Car Died.") # Added print for debugging
 
     def collide(self, mask, x=0, y=0):
         car_mask = pygame.mask.from_surface(self.img)
@@ -76,23 +82,25 @@ class Car:
         poi = mask.overlap(car_mask, offset)
         return poi
 
+# Renamed to PlayerCar to reflect it's not AI yet
+class PlayerCar(Car):
+    def update_manual(self):
+        keys = pygame.key.get_pressed()
+        moved = False
 
-class AICar(Car):
-    def __init__(self, max_vel, rotation_vel):
-        super().__init__(max_vel, rotation_vel)
-        self.radars = []
+        if keys[pygame.K_a]:
+            self.rotate(left=True)
+        if keys[pygame.K_d]:
+            self.rotate(right=True)
+        if keys[pygame.K_w]:
+            moved = True
+            self.move_forward()
+        if keys[pygame.K_s]:
+            moved = True
+            self.move_backward()
 
-    START_POS = (180, 200)  # Starting position on the TechWithTim Track
-
-    def __init__(self, max_vel, rotation_vel):
-        super().__init__(max_vel, rotation_vel)
-
-    def update(self):
-        # Step A: Physics Loop
-        # For now, just drive forward and spin to prove we exist
-        self.move_forward()
-        self.rotate(left=True)
-
+        if not moved:
+            self.reduce_speed()
 
 # --- MAIN SIMULATION LOOP ---
 def draw(win, images, cars):
@@ -105,13 +113,12 @@ def draw(win, images, cars):
 
     pygame.display.update()
 
-
 run = True
 clock = pygame.time.Clock()
 images = [(GRASS, (0, 0)), (TRACK, (0, 0)), (FINISH, FINISH_POSITION), (TRACK_BORDER, (0, 0))]
 
-# We will eventually have a list of 50+ cars here
-cars = [AICar(8, 4)]
+# Use PlayerCar instead of AICar
+cars = [PlayerCar(4, 4)] # Reduced speed slightly for easier control
 
 while run:
     clock.tick(FPS)
@@ -125,6 +132,6 @@ while run:
 
     for car in cars:
         if car.alive:
-            car.update()
+            car.update_manual() # Call the manual control method
 
 pygame.quit()
