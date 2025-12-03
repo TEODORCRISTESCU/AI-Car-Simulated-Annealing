@@ -6,7 +6,7 @@ import os
 import sys
 from utils import scale_image, blit_rotate_center
 
-# --- CONFIG & ASSETS ---
+################## Pygame Setup ##################
 pygame.font.init()
 STAT_FONT = pygame.font.SysFont("consolas", 18)
 TITLE_FONT = pygame.font.SysFont("consolas", 24, bold=True)
@@ -29,10 +29,11 @@ pygame.display.set_caption("AI Trainer: Optimize Fix & Lap Time")
 
 FPS = 60
 
-# --- CONSTANTS ---
+#### basics ########
+
 ACTIONS = ["ACCELERATE", "BRAKE", "ROTATE_LEFT", "ROTATE_RIGHT", "GO_STRAIGHT"]
 ACTION_REPEAT = 4
-CHECKPOINT_RADIUS = 15 # Used for collision and drawing
+CHECKPOINT_RADIUS = 15 # so that we can make the moves more accurate
 
 CHECKPOINTS = [
     (116, 71), (49, 138), (70, 481), (315, 732),
@@ -42,7 +43,7 @@ CHECKPOINTS = [
     (209, 401), (178, 359)
 ]
 
-# ======== CAR CLASS ========
+##### Car class ####
 
 class Car:
     IMG = RED_CAR
@@ -106,7 +107,7 @@ class Car:
         self.check_collision()
 
     def check_collision(self):
-        if self.collide(TRACK_BORDER_MASK) is not None:
+        if self.collide(TRACK_BORDER_MASK) is not None: # see if car hit a wall
             self.alive = False
 
     def collide(self, mask, x=0, y=0):
@@ -125,7 +126,7 @@ class PlayerCar(Car):
         if keys[pygame.K_s]: moved = True; self.move_backward()
         if not moved: self.reduce_speed()
 
-# ======== AI MANAGER ========
+##### AI MANAGER ######
 
 class TrainingManager:
     def __init__(self):
@@ -192,10 +193,6 @@ class TrainingManager:
         self.save_model()
 
     def start_full_optimization(self, car):
-        """
-        Called when the car finishes the track or user presses 'O'.
-        Switches to optimizing the ENTIRE sequence of actions found so far.
-        """
         print(f"ENTERING OPTIMIZE MODE. Current Path Length: {len(self.committed_actions)} frames")
 
         self.optimizing_full_lap = True
@@ -233,7 +230,7 @@ class TrainingManager:
                     self.best_lap_time = data.get("best_lap_time", 99999)
                     print("Hot Resume: Loaded previous state.")
             except:
-                print("Could not load save file. Starting fresh.")
+                print("Could not load save file => Start again, please!.")
 
     def save_model(self):
         data = {
@@ -292,7 +289,7 @@ class TrainingManager:
     def commit_segment(self, car):
         # We finished the lap!
         if self.start_checkpoint_idx == len(CHECKPOINTS) - 1:
-            print("LAP FINISHED! Saving full run and switching to Optimization.")
+            print("LAP FINISHED! Saving full run. Switching to Optimization.")
 
             # Commit the final piece
             actions_taken = self.current_segment_actions[:self.step_index+1]
@@ -338,13 +335,13 @@ class TrainingManager:
     def prepare_next_attempt(self, car):
         score = self.current_reward
 
-        # --- UPDATE BEST ---
+        ### Updates best attempt ####
         if score > self.best_segment_score:
             self.best_segment_score = score
             self.best_segment_actions = list(self.current_segment_actions)
             self.stagnation_counter = 0
 
-            # If optimizing, update committed actions immediately to reflect improvement
+            # If optimizing, update committed actions immediately to show improvement
             if self.optimizing_full_lap:
                 # Update lap time display
                 total_frames = self.step_index * ACTION_REPEAT
@@ -353,7 +350,7 @@ class TrainingManager:
         else:
             self.stagnation_counter += 1
 
-        # --- MODE SWITCHING ---
+        # ### Mode Selection ####
         if self.closest_dist_this_run < 80 or self.stagnation_counter > 20:
              self.mode = "PRECISION"
              self.T = 20
@@ -369,7 +366,7 @@ class TrainingManager:
             self.mode = "PRECISION"
             self.T = 20
 
-        # --- ACCEPTANCE ---
+        #### ACCEPTANCE ####
         if self.mode == "PRECISION":
             if score >= self.best_segment_score:
                 self.accepted_score = score
@@ -391,7 +388,7 @@ class TrainingManager:
                 else:
                     self.current_segment_actions = list(self.best_segment_actions)
 
-        # Panic Scramble (Disabled during Optimize)
+        # Panic Scramble
         if not self.optimizing_full_lap and self.stagnation_counter > 60:
              self.current_segment_actions = self.get_smart_initialization(car)
              self.stagnation_counter = 0
@@ -420,7 +417,7 @@ class TrainingManager:
                 self.current_segment_actions[i] = forced_action
 
     def update(self, car):
-        # 1. Death / Timeout Check
+
         if not car.alive:
             self.current_reward -= 1000
             self.prepare_next_attempt(car)
@@ -436,7 +433,6 @@ class TrainingManager:
                 self.prepare_next_attempt(car)
             return
 
-        # 2. Apply Action
         action = self.current_segment_actions[self.step_index]
         match action:
             case "ACCELERATE": car.move_forward()
@@ -452,8 +448,6 @@ class TrainingManager:
             self.current_path_points.append((car.x + car.img.get_width()/2, car.y + car.img.get_height()/2))
 
         # 4. Target & Reward Logic
-        # If optimizing, the target is ALWAYS the next checkpoint in the full list
-        # But we don't 'commit' segments anymore, we just accumulate score.
         current_cp_index = self.start_checkpoint_idx
         if self.optimizing_full_lap:
             # Dynamically find closest checkpoint to allow lap tracking
@@ -511,7 +505,7 @@ class TrainingManager:
             self.step_index += 1
             self.frame_counter = 0
 
-# ======== VISUALIZATION & MAIN ========
+#### VISUALIZATION & MAIN #####
 
 def draw_paths(win, manager):
     # If optimizing, we draw the best lap attempt
@@ -568,9 +562,7 @@ def draw(win, images, car, mode, manager, hyperspeed):
     pygame.draw.line(win, (255, 255, 255), (130, 250), (130, 370), 5)
 
     if mode == "TRAINING":
-        draw_paths(win, manager)
-        # Draw target circles
-        #
+        draw_paths(win, manager)   # Draw target circles
         target = CHECKPOINTS[manager.start_checkpoint_idx]
         pygame.draw.circle(win, (0, 255, 255), target, CHECKPOINT_RADIUS, 2)
 
