@@ -131,32 +131,26 @@ class PlayerCar(Car):
 
 class TrainingManager:
     def __init__(self):
-        # Saved state
         self.committed_actions = []
         self.committed_path_points = [(180, 200)]
         self.start_state = None
         self.start_checkpoint_idx = 0
 
-        # Undo history
         self.history_stack = []
 
-        # Current Segment Training
         self.current_segment_actions = self.random_actions(150)
         self.best_segment_actions = list(self.current_segment_actions)
         self.best_segment_score = -99999
         self.accepted_score = -99999
 
-        # Logic Flags
         self.stagnation_counter = 0
         self.STAGNATION_THRESHOLD = 20
         self.optimizing_full_lap = False
         self.best_lap_time = 99999
 
-        # Simulation Batch State (Concurrency)
         self.sim_states = []
         self.step_index_global = 0
 
-        # Annealing
         self.INITIAL_TEMP = 200
         self.T = self.INITIAL_TEMP
         self.cooling = 0.99
@@ -480,7 +474,6 @@ class TrainingManager:
                 state["step_index"] += 1
                 state["frame_counter"] = 0
 
-        # --- End of Frame ---
         if active_cars == 0:
             self.prepare_next_attempt(cars)
 
